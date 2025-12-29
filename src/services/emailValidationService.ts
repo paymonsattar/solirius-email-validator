@@ -10,6 +10,7 @@
 import { logger } from '../config';
 import { getValidationLimiter } from '../utils';
 import { DetailedValidationResult } from '../types';
+import { withTimeout } from '../utils/timeout';
 
 export enum EmailValidationRecordStatus {
   PENDING = 'pending',
@@ -55,6 +56,27 @@ function hasValidEmailFormat(email: string): boolean {
 }
 
 /**
+ * Mock API call that can timeout or fail
+ */
+async function mockExternalApiCall(email: string, delay: number): Promise<{ valid: boolean }> {
+  // Simulate 5% chance of API hanging
+  if (Math.random() < 0.05) {
+    await new Promise(() => {});// Never resolves
+  }
+  
+  // Simulate 5% chance of API throwing an error
+  if (Math.random() < 0.05) {
+    throw new Error('External API unavailable');
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, delay));
+  
+  const valid = Math.random() > 0.15;
+
+  return { valid };
+}
+
+/**
  * Pretends to call an email validation API, simulates a third
  * party vaidation API with 85% pass rate and realistic delays
  */
@@ -62,20 +84,29 @@ async function mockValidateEmail(
   name: string,
   email: string
 ): Promise<DetailedValidationResult> {
-  // Random delay between 1-10 seconds
-  const delay = 1000 + Math.random() * 9000;
+  try {
+    const delay = 1000 + Math.random() * 9000;
 
-  await new Promise(resolve => setTimeout(resolve, delay));
-  
-  // 85% pass rate
-  const valid = Math.random() > 0.15;
-  
-  return {
-    name,
-    email,
-    valid,
-    error: valid ? undefined : 'Mailbox not found',
-  };
+    const result = await withTimeout(
+      mockExternalApiCall(email, delay),
+      delay + 2000, // Add 2 seconds to the mock delay for timeouts
+      `Validation timed out for ${email}`
+    );
+    
+    return {
+      name,
+      email,
+      valid: result.valid,
+      error: result.valid ? undefined : 'Mailbox not found',
+    };
+  } catch (error) {
+    return {
+      name,
+      email,
+      valid: false,
+      error: error instanceof Error ? error.message : 'Validation service error',
+    };
+  }
 }
 
 /**

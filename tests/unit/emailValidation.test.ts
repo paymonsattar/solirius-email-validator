@@ -181,5 +181,36 @@ describe('Email Validation Service', () => {
         expect(results[0].email).toBe('user@example.com');
       });
     });
+
+    describe('error handling', () => {
+      it('should handle API errors gracefully and return invalid with error message', async () => {
+        const records = [
+          { name: 'User1', email: 'user1@example.com' },
+          { name: 'User2', email: 'user2@example.com' },
+          { name: 'User3', email: 'user3@example.com' },
+          { name: 'User4', email: 'user4@example.com' },
+          { name: 'User5', email: 'user5@example.com' },
+        ];
+        
+        const results = await validateEmailBatch(records, 'test-upload');
+
+        // All should complete (no crashes)
+        expect(results).toHaveLength(5);
+        
+        // Each result should have valid structure
+        results.forEach(result => {
+          expect(result).toHaveProperty('name');
+          expect(result).toHaveProperty('email');
+          expect(result).toHaveProperty('valid');
+          expect(typeof result.valid).toBe('boolean');
+          
+          // If invalid, should have an error message
+          if (!result.valid) {
+            expect(result.error).toBeDefined();
+            expect(typeof result.error).toBe('string');
+          }
+        });
+      });
+    });
   });
 });
