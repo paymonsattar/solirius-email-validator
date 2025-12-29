@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Validator</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    .status-cell { transition: all 0.3s ease; }
+  </style>
+</head>
+<body class="min-h-screen bg-base-200">
+  <div class="container mx-auto px-4 py-8 max-w-4xl">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-base-content">Email Validator</h1>
+      <p class="text-base-content/60 mt-2">Upload a CSV file to validate email addresses</p>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        
+        <div id="uploadSection">
+          <div id="dropZone" class="border-2 border-dashed border-base-300 rounded-xl p-12 text-center cursor-pointer hover:border-primary hover:bg-base-200 transition-all duration-200">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p class="mt-4 text-base-content/70">Drop your CSV file here or click to browse</p>
+            <p class="text-sm text-base-content/40 mt-1">File must contain 'name' and 'email' columns</p>
+            <input type="file" id="fileInput" accept=".csv" class="hidden">
+          </div>
+
+          <div id="selectedFile" class="hidden mt-4">
+            <div class="flex items-center justify-between p-4 bg-base-200 rounded-lg">
+              <div class="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div>
+                  <p id="fileName" class="font-medium text-base-content"></p>
+                  <p id="fileSize" class="text-sm text-base-content/60"></p>
+                </div>
+              </div>
+              <button id="removeFile" class="btn btn-ghost btn-sm btn-circle">✕</button>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <button id="uploadBtn" class="btn btn-primary w-full" disabled>Upload & Validate</button>
+          </div>
+        </div>
+
+        <div id="processingSection" class="hidden">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-base-content">Validating Emails</h2>
+              <p class="text-sm text-base-content/60"><span id="processedCount">0</span> of <span id="totalCount">0</span> processed</p>
+            </div>
+            <span id="progressPercent" class="text-2xl font-bold text-primary">0%</span>
+          </div>
+
+          <progress id="progressBar" class="progress progress-primary w-full h-3" value="0" max="100"></progress>
+
+          <div class="grid grid-cols-3 gap-4 mt-6">
+            <div class="stat bg-base-200 rounded-lg p-4"><div class="stat-title text-xs">Pending</div><div id="pendingCount" class="stat-value text-xl text-base-content/60">0</div></div>
+            <div class="stat bg-success/10 rounded-lg p-4"><div class="stat-title text-xs">Valid</div><div id="validCount" class="stat-value text-xl text-success">0</div></div>
+            <div class="stat bg-error/10 rounded-lg p-4"><div class="stat-title text-xs">Invalid</div><div id="invalidCount" class="stat-value text-xl text-error">0</div></div>
+          </div>
+
+          <div class="mt-6 overflow-x-auto max-h-96 overflow-y-auto">
+            <table class="table table-sm">
+              <thead class="sticky top-0 bg-base-100"><tr><th class="w-12">#</th><th>Name</th><th>Email</th><th class="w-28 text-center">Status</th></tr></thead>
+              <tbody id="emailTableBody"></tbody>
+            </table>
+          </div>
+
+          <div id="newUploadSection" class="hidden mt-6">
+            <button id="newUploadBtn" class="btn btn-outline w-full">Upload Another File</button>
+          </div>
+        </div>
+
+        <div id="errorAlert" class="hidden mt-4">
+          <div class="alert alert-error"><span id="errorMessage"></span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="flex justify-center gap-6 mt-6 text-sm">
+      <a href="/api-docs" class="link link-hover text-base-content/60">API Docs</a>
+      <a href="/health" class="link link-hover text-base-content/60">Health Check</a>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let currentFile = null, currentUploadId = null, pollInterval = null;
+
+    $('dropZone').onclick = () => $('fileInput').click();
+    $('dropZone').ondragover = e => { e.preventDefault(); $('dropZone').classList.add('border-primary', 'bg-base-200'); };
+    $('dropZone').ondragleave = () => $('dropZone').classList.remove('border-primary', 'bg-base-200');
+    $('dropZone').ondrop = e => { e.preventDefault(); $('dropZone').classList.remove('border-primary', 'bg-base-200'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
+    $('fileInput').onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
+    $('removeFile').onclick = clearFile;
+    $('uploadBtn').onclick = uploadFile;
+    $('newUploadBtn').onclick = resetUI;
+
+    function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith('.csv')) { showError('Please select a CSV file'); return; }
+      currentFile = file;
+      $('fileName').textContent = file.name;
+      $('fileSize').textContent = file.size < 1024 ? file.size + ' B' : file.size < 1048576 ? (file.size/1024).toFixed(1) + ' KB' : (file.size/1048576).toFixed(1) + ' MB';
+      $('selectedFile').classList.remove('hidden');
+      $('uploadBtn').disabled = false;
+      hideError();
+    }
+
+    function clearFile() {
+      currentFile = null;
+      $('fileInput').value = '';
+      $('selectedFile').classList.add('hidden');
+      $('uploadBtn').disabled = true;
+    }
+
+    async function uploadFile() {
+      if (!currentFile) return;
+      $('uploadBtn').disabled = true;
+      $('uploadBtn').innerHTML = '<span class="loading loading-spinner loading-sm"></span> Uploading...';
+      hideError();
+
+      try {
+        const formData = new FormData();
+        formData.append('file', currentFile);
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Upload failed');
+        currentUploadId = data.uploadId;
+        $('uploadSection').classList.add('hidden');
+        $('processingSection').classList.remove('hidden');
+        pollInterval = setInterval(poll, 500);
+        poll();
+      } catch (err) {
+        showError(err.message);
+        $('uploadBtn').disabled = false;
+        $('uploadBtn').textContent = 'Upload & Validate';
+      }
+    }
+
+    async function poll() {
+      if (!currentUploadId) return;
+      try {
+        const res = await fetch(`/status/${currentUploadId}/detailed`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+        
+        $('progressBar').value = data.progress;
+        $('progressPercent').textContent = data.progress + '%';
+        $('processedCount').textContent = data.processedRecords;
+        $('totalCount').textContent = data.totalRecords;
+
+        if (data.emailRecords) {
+          const pending = data.emailRecords.filter(r => r.status === 'pending').length;
+          const valid = data.emailRecords.filter(r => r.status === 'valid').length;
+          const invalid = data.emailRecords.filter(r => r.status === 'invalid').length;
+          $('pendingCount').textContent = pending;
+          $('validCount').textContent = valid;
+          $('invalidCount').textContent = invalid;
+          updateTable(data.emailRecords);
+        }
+
+        if (data.status === 'completed' || data.status === 'failed') {
+          clearInterval(pollInterval);
+          $('newUploadSection').classList.remove('hidden');
+          if (data.status === 'failed') showError(data.error);
+        }
+      } catch (err) { console.error('Poll error:', err); }
+    }
+
+    function updateTable(records) {
+      const tbody = $('emailTableBody');
+      if (tbody.children.length !== records.length) {
+        tbody.innerHTML = records.map((r, i) => 
+          `<tr data-i="${i}"><td class="text-base-content/60">${i+1}</td><td class="font-medium">${esc(r.name)}</td><td class="text-base-content/80">${esc(r.email)}</td><td class="status-cell text-center">${badge(r.status, r.error)}</td></tr>`
+        ).join('');
+      } else {
+        records.forEach((r, i) => {
+          const cell = tbody.querySelector(`tr[data-i="${i}"] .status-cell`);
+          if (cell) cell.innerHTML = badge(r.status, r.error);
+        });
+      }
+    }
+
+    function badge(s, e) {
+      if (s === 'pending') return '<span class="badge badge-ghost badge-sm">Pending</span>';
+      if (s === 'valid') return '<span class="badge badge-success badge-sm">✓ Valid</span>';
+      if (s === 'invalid') return `<span class="badge badge-error badge-sm cursor-help" title="${esc(e||'Invalid')}">✕ Invalid</span>`;
+      return '<span class="badge badge-ghost badge-sm">...</span>';
+    }
+
+    function esc(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
+    function showError(m) { $('errorMessage').textContent = m; $('errorAlert').classList.remove('hidden'); }
+    function hideError() { $('errorAlert').classList.add('hidden'); }
+
+    function resetUI() {
+      currentFile = null; currentUploadId = null;
+      if (pollInterval) clearInterval(pollInterval);
+      $('fileInput').value = '';
+      $('selectedFile').classList.add('hidden');
+      $('uploadBtn').disabled = true;
+      $('uploadBtn').textContent = 'Upload & Validate';
+      $('progressBar').value = 0;
+      $('progressPercent').textContent = '0%';
+      $('processedCount').textContent = '0';
+      $('totalCount').textContent = '0';
+      $('pendingCount').textContent = '0';
+      $('validCount').textContent = '0';
+      $('invalidCount').textContent = '0';
+      $('emailTableBody').innerHTML = '';
+      $('newUploadSection').classList.add('hidden');
+      hideError();
+      $('processingSection').classList.add('hidden');
+      $('uploadSection').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>

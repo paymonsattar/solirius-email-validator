@@ -1,0 +1,5 @@
+name,email
+SQL Injection,admin@example.com'); DROP TABLE users;--
+XSS Attack,script@example.com<script>alert('XSS')</script>
+HTML Injection,<img src=x onerror=alert(1)>@test.com
+Normal User,normal@example.com

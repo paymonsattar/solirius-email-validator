@@ -1,0 +1,4 @@
+name,email
+John Doe,invalid-email
+Jane Smith,noatsign
+Bob Johnson,missing@dot
